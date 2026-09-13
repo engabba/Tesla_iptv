@@ -1,1093 +1,463 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StreamPulse IPTV Player (Secure)</title>
-    
+    <title>StreamPulse IPTV Player</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HLS.js for stream playback -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- HLS.js Library for HTTP Live Streaming -->
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <!-- CryptoJS for AES Encryption of Credentials -->
+    <!-- CryptoJS for secure encryption -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        dark: {
-                            base: '#0b0f19',
-                            surface: '#151c2c',
-                            card: '#1e293b',
-                            border: '#334155',
-                            hover: '#3b82f6'
-                        },
-                        brand: {
-                            primary: '#3b82f6',
-                            accent: '#6366f1',
-                            warning: '#f59e0b',
-                            danger: '#ef4444'
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
     <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+        .aspect-video-container { position: relative; padding-bottom: 56.25%; height: 0; }
+        .aspect-video-container video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0b0f19; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #334155; }
-        .aspect-video-container {
-            position: relative;
-            padding-bottom: 56.25%;
-            height: 0;
-            overflow: hidden;
-        }
-        .aspect-video-container video {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-        }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
     </style>
 </head>
-<body class="bg-dark-base text-slate-100 font-sans h-full flex flex-col overflow-hidden select-none">
+<body class="h-screen flex flex-col overflow-hidden">
 
-    <header class="bg-dark-surface/90 backdrop-blur border-b border-slate-800/80 px-4 py-2.5 flex items-center justify-between shrink-0 z-20">
+    <!-- Header / Navbar -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
         <div class="flex items-center space-x-3">
-            <button id="toggle-sidebar" class="md:hidden text-slate-400 hover:text-white p-1 rounded">
-                <i class="fa-solid fa-bars text-xl"></i>
-            </button>
-            <div class="flex items-center space-x-2">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
-                    <i class="fa-solid fa-tv text-sm"></i>
-                </div>
-                <span class="font-bold text-lg tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">StreamPulse</span>
-            </div>
-            <span id="active-playlist-badge" class="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 max-w-[160px] truncate">
-                Demo Streams
-            </span>
+            <i class="fa-solid fa-tv text-indigo-500 text-2xl"></i>
+            <h1 class="font-bold text-lg tracking-wide bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                StreamPulse
+            </h1>
         </div>
-
         <div class="flex items-center space-x-2">
-            <!-- CORS Proxy Mode Switcher -->
-            <div class="relative group">
-                <button id="cors-menu-btn" title="Proxy Selector for HTTPS/HTTP compatibility" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center space-x-1.5 transition">
-                    <span id="cors-indicator" class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span id="cors-label" class="hidden md:inline">Proxy: Auto</span>
-                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
-                </button>
-                <div id="cors-dropdown" class="absolute right-0 mt-1 w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-xl py-1 hidden z-50 text-xs">
-                    <button data-proxy="auto" class="proxy-select-btn w-full text-left px-3 py-1.5 text-blue-400 hover:bg-slate-800 font-medium">Auto Fallback (Recommended)</button>
-                    <button data-proxy="corsproxy" class="proxy-select-btn w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800">Corsproxy.io</button>
-                    <button data-proxy="allorigins" class="proxy-select-btn w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800">AllOrigins</button>
-                    <button data-proxy="thingproxy" class="proxy-select-btn w-full text-left px-3 py-1.5 text-slate-300 hover:bg-slate-800">ThingProxy</button>
-                    <button data-proxy="none" class="proxy-select-btn w-full text-left px-3 py-1.5 text-slate-400 hover:bg-slate-800">Direct (No Proxy)</button>
-                </div>
-            </div>
-
-            <!-- Lock / Security Settings Button -->
-            <button id="open-security-btn" title="Security & Master Passcode" class="p-2 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
-                <i id="security-lock-icon" class="fa-solid fa-shield-halved text-slate-400"></i>
+            <!-- CORS Proxy Toggle -->
+            <button id="proxyBtn" onclick="toggleProxy()" class="px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+                <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> Proxy: <span id="proxyStatus">Direct</span>
             </button>
-
-            <!-- Playlist Manager Button -->
-            <button id="open-playlists-btn" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20 flex items-center space-x-2 transition">
+            <!-- Settings / Playlist Manager Modal Trigger -->
+            <button onclick="openModal('playlistModal')" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition">
                 <i class="fa-solid fa-list-ul"></i>
-                <span class="hidden sm:inline">Playlists</span>
             </button>
         </div>
     </header>
 
-    <div class="flex flex-1 overflow-hidden relative">
+    <!-- Main Container -->
+    <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
         
-        <!-- Left Sidebar: Categories & Search -->
-        <aside id="sidebar" class="w-72 bg-dark-surface/95 border-r border-slate-800/80 flex flex-col absolute md:relative inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out">
-            <!-- Search Channel -->
-            <div class="p-3 border-b border-slate-800/80">
+        <!-- Left Side: Player & Info -->
+        <div class="w-full lg:w-3/5 flex flex-col bg-slate-950 border-r border-slate-800">
+            <!-- Video Container -->
+            <div class="bg-black aspect-video-container relative group">
+                <video id="videoPlayer" class="w-full h-full" controls autoplay playsinline></video>
+                <div id="playerOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 p-4 text-center z-10">
+                    <i id="playerIcon" class="fa-solid fa-play-circle text-5xl text-indigo-500 mb-3 animate-pulse"></i>
+                    <p id="playerStatus" class="text-sm font-medium text-slate-300">Select a channel or load a playlist to begin</p>
+                </div>
+            </div>
+
+            <!-- Current Stream Info Bar -->
+            <div class="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h2 id="currentChannelName" class="font-bold text-slate-100 truncate">No Channel Selected</h2>
+                    <p id="currentChannelCategory" class="text-xs text-slate-400">IPTV Live Stream</p>
+                </div>
+                <button id="favCurrentBtn" onclick="toggleFavoriteCurrent()" class="text-slate-600 hover:text-amber-400 text-xl transition">
+                    <i class="fa-star fa-regular"></i>
+                </button>
+            </div>
+
+            <!-- Status Logs / Errors -->
+            <div id="errorLog" class="hidden m-4 p-3 bg-red-950/50 border border-red-800/60 rounded-lg text-red-200 text-xs">
+                <div class="flex items-start space-x-2">
+                    <i class="fa-solid fa-circle-exclamation text-red-400 mt-0.5"></i>
+                    <div id="errorMessage">Error details will appear here.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Channel List & Controls -->
+        <div class="w-full lg:w-2/5 flex flex-col bg-slate-900 flex-1 overflow-hidden">
+            
+            <!-- Search & Filters -->
+            <div class="p-3 bg-slate-900 border-b border-slate-800 flex flex-col space-y-2">
                 <div class="relative">
-                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                    <input type="text" id="channel-search" placeholder="Search channels..." class="w-full bg-slate-900/90 border border-slate-700/60 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+                    <input type="text" id="searchInput" oninput="filterChannels()" placeholder="Search channels..." class="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                 </div>
-            </div>
-
-            <!-- Special Views (All, Favorites, History) -->
-            <div class="px-2 py-2 border-b border-slate-800/80 space-y-1 text-xs">
-                <button data-category="__ALL__" class="category-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800/80 active-cat font-medium transition">
-                    <span class="flex items-center space-x-2.5">
-                        <i class="fa-solid fa-layer-group text-blue-400"></i>
-                        <span>All Channels</span>
-                    </span>
-                    <span id="count-all" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400">0</span>
-                </button>
-                <button data-category="__FAV__" class="category-btn w-full flex items-center justify-between px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800/80 transition">
-                    <span class="flex items-center space-x-2.5">
-                        <i class="fa-solid fa-star text-amber-400"></i>
-                        <span>Favorites</span>
-                    </span>
-                    <span id="count-fav" class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400">0</span>
-                </button>
-            </div>
-
-            <!-- Dynamic Category List -->
-            <div class="flex-1 overflow-y-auto p-2 space-y-0.5" id="category-list">
-                <!-- Categories injected here -->
-            </div>
-        </aside>
-
-        <!-- Sidebar Overlay for Mobile -->
-        <div id="sidebar-overlay" class="fixed inset-0 bg-black/60 z-20 hidden md:hidden backdrop-blur-xs"></div>
-
-        <main class="flex-1 flex flex-col overflow-hidden bg-slate-950">
-            
-            <!-- Video Player Screen Section -->
-            <div class="bg-black relative border-b border-slate-800/80 flex-shrink-0">
-                <div class="max-w-5xl mx-auto w-full">
-                    <div class="aspect-video-container bg-slate-950 flex items-center justify-center group">
-                        <video id="video-player" class="w-full h-full" controls crossorigin="anonymous" playsinline></video>
-                        
-                        <!-- Overlay Loading / Player Status -->
-                        <div id="player-placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 p-6 text-center z-10">
-                            <div id="player-spinner" class="hidden mb-3">
-                                <i class="fa-solid fa-circle-notch fa-spin text-3xl text-blue-500"></i>
-                            </div>
-                            <i id="player-icon" class="fa-solid fa-play-circle text-5xl text-slate-700 mb-3"></i>
-                            <h3 id="player-status-title" class="text-sm font-semibold text-slate-300">No Stream Playing</h3>
-                            <p id="player-status-desc" class="text-xs text-slate-500 max-w-sm mt-1">Select a channel from the grid below to start streaming.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Now Playing Bar -->
-                <div class="px-4 py-2 bg-dark-surface border-t border-slate-800/60 flex items-center justify-between text-xs">
-                    <div class="flex items-center space-x-3 truncate mr-2">
-                        <div id="now-playing-logo-bg" class="w-7 h-7 rounded bg-slate-800 flex items-center justify-center overflow-hidden shrink-0 border border-slate-700">
-                            <img id="now-playing-logo" class="w-full h-full object-contain hidden" src="" alt="logo" onerror="this.classList.add('hidden')">
-                            <i id="now-playing-icon" class="fa-solid fa-tv text-slate-500 text-xs"></i>
-                        </div>
-                        <div class="truncate">
-                            <div id="now-playing-title" class="font-semibold text-slate-200 truncate">Select a channel</div>
-                            <div id="now-playing-group" class="text-[10px] text-slate-400 truncate">StreamPulse Player</div>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center space-x-2 shrink-0">
-                        <button id="toggle-favorite-btn" disabled class="p-1.5 text-slate-500 hover:text-amber-400 disabled:opacity-30 transition">
-                            <i id="fav-icon" class="fa-regular fa-star text-base"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Channels Header Bar -->
-            <div class="px-4 py-2 bg-dark-surface border-b border-slate-800/80 flex items-center justify-between shrink-0">
-                <div class="flex items-center space-x-2">
-                    <span id="current-category-label" class="font-semibold text-xs text-slate-200">All Channels</span>
-                    <span id="channel-count-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium">0</span>
-                </div>
-                <div class="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                    <button id="view-grid-btn" class="px-2 py-1 rounded text-xs text-blue-400 bg-slate-800" title="Grid View">
-                        <i class="fa-solid fa-grip"></i>
-                    </button>
-                    <button id="view-list-btn" class="px-2 py-1 rounded text-xs text-slate-400 hover:text-white" title="List View">
-                        <i class="fa-solid fa-list"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Channel Grid / List Container -->
-            <div class="flex-1 overflow-y-auto p-3 sm:p-4" id="channel-container">
-                <div id="channel-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 sm:gap-3">
-                    <!-- Channels rendered here -->
-                </div>
-            </div>
-        </main>
-    </div>
-
-    <!-- PLAYLIST MANAGER MODAL -->
-    <div id="playlist-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden">
-        <div class="bg-dark-surface border border-slate-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            
-            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-                <h2 class="font-bold text-base text-white flex items-center space-x-2">
-                    <i class="fa-solid fa-folder-plus text-blue-500"></i>
-                    <span>Manage Playlists</span>
-                </h2>
-                <button id="close-modal-btn" class="text-slate-400 hover:text-white p-1 rounded-lg">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                </button>
-            </div>
-
-            <div class="flex-1 overflow-y-auto p-5">
-                <!-- Navigation Tabs -->
-                <div class="flex border-b border-slate-800 mb-4 space-x-4 text-xs font-medium">
-                    <button id="tab-btn-saved" class="pb-2 border-b-2 border-blue-500 text-blue-400">Saved Servers</button>
-                    <button id="tab-btn-xtream" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">Add Xtream API</button>
-                    <button id="tab-btn-m3u-url" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">M3U Link</button>
-                    <button id="tab-btn-m3u-file" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200">File Upload</button>
-                </div>
-
-                <!-- Tab 1: Saved Playlists & Credentials -->
-                <div id="view-saved-playlists" class="space-y-3">
-                    <div id="saved-playlists-list" class="space-y-2">
-                        <!-- Saved List injected here -->
-                    </div>
-                </div>
-
-                <!-- Tab 2: Xtream Codes API Form -->
-                <form id="form-xtream" class="space-y-3 hidden">
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Playlist / Server Title</label>
-                        <input type="text" id="xtream-name" placeholder="My Premium IPTV" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Server Address</label>
-                        <input type="text" id="xtream-host" placeholder="http://domain.com:8080" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                        <p class="text-[10px] text-slate-500 mt-1">Must start with http:// or https://</p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">Username</label>
-                            <input type="text" id="xtream-user" placeholder="Enter username" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-slate-400 mb-1">Password</label>
-                            <input type="password" id="xtream-pass" placeholder="Enter password" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center space-x-2 pt-1">
-                        <input type="checkbox" id="save-credentials-check" checked class="rounded border-slate-700 text-blue-600 focus:ring-0">
-                        <label for="save-credentials-check" class="text-xs text-slate-300">Save encrypted credentials to device</label>
-                    </div>
-
-                    <button type="submit" class="w-full py-2.5 mt-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-blue-600/20">
-                        Connect & Save Server
-                    </button>
-                </form>
-
-                <!-- Tab 3: M3U Link -->
-                <form id="form-m3u-url" class="space-y-3 hidden">
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Playlist Name</label>
-                        <input type="text" id="m3u-url-name" placeholder="My M3U Stream" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">M3U / M3U8 Playlist URL</label>
-                        <input type="url" id="m3u-url-val" placeholder="https://example.com/playlist.m3u" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-blue-600/20">
-                        Load & Save Playlist
-                    </button>
-                </form>
-
-                <!-- Tab 4: Local File -->
-                <form id="form-m3u-file" class="space-y-3 hidden">
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Playlist Name</label>
-                        <input type="text" id="m3u-file-name" placeholder="Local IPTV File" class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs text-slate-400 mb-1">Select .m3u or .m3u8 File</label>
-                        <input type="file" id="m3u-file-input" accept=".m3u,.m3u8,.txt" required class="w-full bg-slate-900 border border-slate-700/70 rounded-lg px-3 py-2 text-xs text-slate-300 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-slate-800 file:text-blue-400 hover:file:bg-slate-700">
-                    </div>
-                    <button type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs transition shadow-md shadow-blue-600/20">
-                        Parse File & Save
-                    </button>
-                </form>
-
-            </div>
-        </div>
-    </div>
-
-    <!-- SECURITY & BACKUP MODAL -->
-    <div id="security-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden">
-        <div class="bg-dark-surface border border-slate-800 rounded-xl max-w-md w-full overflow-hidden shadow-2xl">
-            <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-                <h2 class="font-bold text-base text-white flex items-center space-x-2">
-                    <i class="fa-solid fa-lock text-amber-500"></i>
-                    <span>Security & Backup Options</span>
-                </h2>
-                <button id="close-security-btn" class="text-slate-400 hover:text-white p-1 rounded-lg">
-                    <i class="fa-solid fa-xmark text-lg"></i>
-                </button>
-            </div>
-            
-            <div class="p-5 space-y-4 text-xs">
-                <!-- PIN Protection Setup -->
-                <div class="bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 space-y-2">
-                    <div class="font-semibold text-slate-200">Master PIN Protection</div>
-                    <p class="text-[11px] text-slate-400">Lock your saved IPTV passwords behind a security PIN.</p>
-                    <div class="flex items-center space-x-2 pt-1">
-                        <input type="password" id="master-pin-input" placeholder="Set 4-digit PIN" maxlength="6" class="w-32 bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-white">
-                        <button id="save-pin-btn" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-medium transition">Save PIN</button>
-                        <button id="clear-pin-btn" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition">Disable</button>
-                    </div>
-                </div>
-
-                <!-- Backup Export / Import -->
-                <div class="bg-slate-900/80 p-3.5 rounded-lg border border-slate-800 space-y-2">
-                    <div class="font-semibold text-slate-200">Export / Import Settings</div>
-                    <p class="text-[11px] text-slate-400">Back up your saved playlists and favorites to a file or transfer to another device.</p>
-                    <div class="flex items-center space-x-2 pt-1">
-                        <button id="export-backup-btn" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium transition flex items-center space-x-1">
-                            <i class="fa-solid fa-download"></i>
-                            <span>Export Data</span>
-                        </button>
-                        <label class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded font-medium cursor-pointer transition flex items-center space-x-1">
-                            <i class="fa-solid fa-upload"></i>
-                            <span>Import Data</span>
-                            <input type="file" id="import-backup-file" accept=".json" class="hidden">
-                        </label>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        /**
-         * StreamPulse IPTV Player Core
-         */
-
-        const ENCRYPTION_SECRET = "StreamPulse_Secure_Storage_Key_2026";
-
-        // Preset Channels
-        const PRESET_CHANNELS = [
-            { id: 'preset-1', name: 'NASA TV Public', logo: 'https://www.nasa.gov/wp-content/themes/nasa/assets/images/nasa-logo.svg', group: 'Science', url: 'https://nasa-vh.akamaihd.net/i/nasa_1@315469/master.m3u8' },
-            { id: 'preset-2', name: 'Red Bull TV', logo: '', group: 'Sports', url: 'https://rbmn-live.akamaized.net/hls/live/590920/geo-blocked/master.m3u8' },
-            { id: 'preset-3', name: 'Bloomberg TV', logo: '', group: 'News', url: 'https://live-bloomberg-us.akamaized.net/hls/live/2037704/bloomberg_us/master.m3u8' },
-            { id: 'preset-4', name: 'DW English', logo: '', group: 'News', url: 'https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8' },
-            { id: 'preset-5', name: 'Al Jazeera English', logo: '', group: 'News', url: 'https://live-hls-web-aje.getaj.net/AJE/index.m3u8' }
-        ];
-
-        // App State
-        const state = {
-            playlists: [],
-            activePlaylistId: null,
-            channels: [],
-            filteredChannels: [],
-            categories: new Set(),
-            activeCategory: '__ALL__',
-            currentChannel: null,
-            favorites: new Set(),
-            proxyMode: 'auto',
-            masterPin: '',
-            viewMode: 'grid'
-        };
-
-        const PROXIES = {
-            corsproxy: (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-            allorigins: (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            thingproxy: (url) => `https://thingproxy.freeboard.io/fetch/${url}`
-        };
-
-        // DOM elements
-        const el = {
-            videoPlayer: document.getElementById('video-player'),
-            playerPlaceholder: document.getElementById('player-placeholder'),
-            playerSpinner: document.getElementById('player-spinner'),
-            playerIcon: document.getElementById('player-icon'),
-            playerStatusTitle: document.getElementById('player-status-title'),
-            playerStatusDesc: document.getElementById('player-status-desc'),
-            sidebar: document.getElementById('sidebar'),
-            sidebarOverlay: document.getElementById('sidebar-overlay'),
-            toggleSidebarBtn: document.getElementById('toggle-sidebar'),
-            categoryList: document.getElementById('category-list'),
-            channelGrid: document.getElementById('channel-grid'),
-            channelSearch: document.getElementById('channel-search'),
-            currentCatLabel: document.getElementById('current-category-label'),
-            channelCountBadge: document.getElementById('channel-count-badge'),
-            countAll: document.getElementById('count-all'),
-            countFav: document.getElementById('count-fav'),
-            playlistModal: document.getElementById('playlist-modal'),
-            openPlaylistsBtn: document.getElementById('open-playlists-btn'),
-            closeModalBtn: document.getElementById('close-modal-btn'),
-            activePlaylistBadge: document.getElementById('active-playlist-badge'),
-            nowPlayingTitle: document.getElementById('now-playing-title'),
-            nowPlayingGroup: document.getElementById('now-playing-group'),
-            nowPlayingLogo: document.getElementById('now-playing-logo'),
-            nowPlayingIcon: document.getElementById('now-playing-icon'),
-            toggleFavoriteBtn: document.getElementById('toggle-favorite-btn'),
-            favIcon: document.getElementById('fav-icon'),
-            viewGridBtn: document.getElementById('view-grid-btn'),
-            viewListBtn: document.getElementById('view-list-btn'),
-            corsMenuBtn: document.getElementById('cors-menu-btn'),
-            corsDropdown: document.getElementById('cors-dropdown'),
-            corsIndicator: document.getElementById('cors-indicator'),
-            corsLabel: document.getElementById('cors-label'),
-            openSecurityBtn: document.getElementById('open-security-btn'),
-            securityModal: document.getElementById('security-modal'),
-            closeSecurityBtn: document.getElementById('close-security-btn'),
-            savedPlaylistsList: document.getElementById('saved-playlists-list'),
-            formXtream: document.getElementById('form-xtream'),
-            formM3uUrl: document.getElementById('form-m3u-url'),
-            formM3uFile: document.getElementById('form-m3u-file'),
-            viewSavedPlaylists: document.getElementById('view-saved-playlists'),
-            tabSaved: document.getElementById('tab-btn-saved'),
-            tabXtream: document.getElementById('tab-btn-xtream'),
-            tabM3uUrl: document.getElementById('tab-btn-m3u-url'),
-            tabM3uFile: document.getElementById('tab-btn-m3u-file')
-        };
-
-        let hlsInstance = null;
-
-        // --- Encrypted Storage Handlers ---
-        function encryptData(data) {
-            return CryptoJS.AES.encrypt(JSON.stringify(data), ENCRYPTION_SECRET).toString();
-        }
-
-        function decryptData(ciphertext) {
-            try {
-                const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_SECRET);
-                return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
-            } catch (e) {
-                return null;
-            }
-        }
-
-        function saveStateToStorage() {
-            try {
-                localStorage.setItem('sp_playlists_enc', encryptData(state.playlists));
-                localStorage.setItem('sp_favorites', JSON.stringify(Array.from(state.favorites)));
-                localStorage.setItem('sp_active_pl', state.activePlaylistId || 'preset');
-                if (state.masterPin) localStorage.setItem('sp_pin', encryptData(state.masterPin));
-                else localStorage.removeItem('sp_pin');
-            } catch (e) {
-                console.error('Storage Save Error:', e);
-            }
-        }
-
-        function loadStateFromStorage() {
-            try {
-                const encPlaylists = localStorage.getItem('sp_playlists_enc');
-                if (encPlaylists) {
-                    const decrypted = decryptData(encPlaylists);
-                    if (decrypted) state.playlists = decrypted;
-                }
-                const favs = localStorage.getItem('sp_favorites');
-                if (favs) state.favorites = new Set(JSON.parse(favs));
                 
-                const encPin = localStorage.getItem('sp_pin');
-                if (encPin) {
-                    const pin = decryptData(encPin);
-                    if (pin) state.masterPin = pin;
-                }
-            } catch (e) {
-                console.error('Storage Load Error:', e);
-            }
-        }
+                <div class="flex items-center space-x-2">
+                    <select id="categorySelect" onchange="filterChannels()" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-indigo-500">
+                        <option value="ALL">All Categories</option>
+                        <option value="FAV">Favorites Only</option>
+                    </select>
+                    <span id="channelCount" class="text-[10px] text-slate-400 whitespace-nowrap px-2">0 Channels</span>
+                </div>
+            </div>
 
-        // --- Initialization ---
-        window.addEventListener('DOMContentLoaded', () => {
-            loadStateFromStorage();
-            setupEventListeners();
-            renderSavedPlaylistsList();
-            
-            const lastActiveId = localStorage.getItem('sp_active_pl') || 'preset';
-            if (lastActiveId !== 'preset' && state.playlists.some(p => p.id === lastActiveId)) {
-                activateSavedPlaylist(lastActiveId);
-            } else {
-                loadPresetChannels();
-            }
-            updateSecurityIcon();
+            <!-- Channel Grid Container -->
+            <div id="channelGrid" class="flex-1 overflow-y-auto p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <!-- Dynamic Channels Render Here -->
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                <button id="prevPageBtn" onclick="changePage(-1)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded disabled:opacity-40">Previous</button>
+                <span id="pageIndicator">Page 1 of 1</span>
+                <button id="nextPageBtn" onclick="changePage(1)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 rounded disabled:opacity-40">Next</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Playlist / Xtream Codes Setup Modal -->
+    <div id="playlistModal" class="hidden fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="px-4 py-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+                <h3 class="font-semibold text-sm text-slate-100"><i class="fa-solid fa-folder-plus text-indigo-400 mr-2"></i>Load IPTV Playlist</h3>
+                <button onclick="closeModal('playlistModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="p-4 space-y-4 overflow-y-auto flex-1">
+                <!-- Mode Selector -->
+                <div class="flex border-b border-slate-800">
+                    <button id="tabM3u" onclick="switchTab('m3u')" class="flex-1 pb-2 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500">M3U Link</button>
+                    <button id="tabXtream" onclick="switchTab('xtream')" class="flex-1 pb-2 text-xs font-semibold text-slate-400 hover:text-slate-200">Xtream Codes</button>
+                </div>
+
+                <!-- M3U Link Panel -->
+                <div id="panelM3u" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">M3U Playlist URL</label>
+                        <input type="url" id="m3uUrlInput" value="https://iptv-org.github.io/iptv/index.m3u" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <button onclick="loadM3uUrl()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">
+                        Fetch M3U Playlist
+                    </button>
+                </div>
+
+                <!-- Xtream Codes Panel -->
+                <div id="panelXtream" class="hidden space-y-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Server Address</label>
+                        <input type="text" id="xcServer" placeholder="http://example.com:8080" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Username</label>
+                        <input type="text" id="xcUser" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Password</label>
+                        <input type="password" id="xcPass" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <button onclick="loadXtreamApi()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition">
+                        Connect Xtream Server
+                    </button>
+                </div>
+
+                <div class="border-t border-slate-800 pt-3">
+                    <button onclick="loadDefaultIptvOrg()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> Reset to Default Free IPTV-Org
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // State Management
+        let allChannels = [];
+        let filteredChannels = [];
+        let favorites = JSON.parse(localStorage.getItem('sp_favs') || '[]');
+        let currentChannel = null;
+        let currentPage = 1;
+        const itemsPerPage = 50;
+        let hlsPlayer = null;
+        let useProxy = false;
+        const PROXY_URL = 'https://corsproxy.io/?';
+        const SAFETY_CHANNEL_CAP = 2000;
+
+        // Initialize Application
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDefaultIptvOrg();
         });
 
-        function setupEventListeners() {
-            el.toggleSidebarBtn.addEventListener('click', toggleSidebar);
-            el.sidebarOverlay.addEventListener('click', toggleSidebar);
-
-            el.openPlaylistsBtn.addEventListener('click', () => el.playlistModal.classList.remove('hidden'));
-            el.closeModalBtn.addEventListener('click', () => el.playlistModal.classList.add('hidden'));
-
-            el.openSecurityBtn.addEventListener('click', () => el.securityModal.classList.remove('hidden'));
-            el.closeSecurityBtn.addEventListener('click', () => el.securityModal.classList.add('hidden'));
-
-            el.tabSaved.addEventListener('click', () => switchTab('saved'));
-            el.tabXtream.addEventListener('click', () => switchTab('xtream'));
-            el.tabM3uUrl.addEventListener('click', () => switchTab('m3u-url'));
-            el.tabM3uFile.addEventListener('click', () => switchTab('m3u-file'));
-
-            el.corsMenuBtn.addEventListener('click', () => el.corsDropdown.classList.toggle('hidden'));
-            document.querySelectorAll('.proxy-select-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    state.proxyMode = e.target.dataset.proxy;
-                    el.corsLabel.textContent = `Proxy: ${state.proxyMode.toUpperCase()}`;
-                    el.corsDropdown.classList.add('hidden');
-                    showNotification(`Proxy mode set to: ${state.proxyMode}`);
-                    if (state.currentChannel) playChannel(state.currentChannel);
-                });
-            });
-
-            el.formXtream.addEventListener('submit', handleXtreamSubmit);
-            el.formM3uUrl.addEventListener('submit', handleM3uUrlSubmit);
-            el.formM3uFile.addEventListener('submit', handleM3uFileSubmit);
-
-            el.channelSearch.addEventListener('input', (e) => filterAndRenderChannels(e.target.value));
-
-            el.viewGridBtn.addEventListener('click', () => setViewMode('grid'));
-            el.viewListBtn.addEventListener('click', () => setViewMode('list'));
-
-            el.categoryList.addEventListener('click', (e) => {
-                const btn = e.target.closest('.category-btn');
-                if (btn) setActiveCategory(btn.dataset.category);
-            });
-            document.querySelectorAll('.category-btn').forEach(btn => {
-                btn.addEventListener('click', () => setActiveCategory(btn.dataset.category));
-            });
-
-            el.toggleFavoriteBtn.addEventListener('click', () => {
-                if (!state.currentChannel) return;
-                const id = state.currentChannel.id;
-                if (state.favorites.has(id)) state.favorites.delete(id);
-                else state.favorites.add(id);
-                saveStateToStorage();
-                updateFavoriteBtnState();
-                updateCategoryCounts();
-                if (state.activeCategory === '__FAV__') filterAndRenderChannels();
-            });
-
-            // Master PIN logic
-            document.getElementById('save-pin-btn').addEventListener('click', () => {
-                const pin = document.getElementById('master-pin-input').value.trim();
-                if (pin.length >= 4) {
-                    state.masterPin = pin;
-                    saveStateToStorage();
-                    updateSecurityIcon();
-                    showNotification('Master Security PIN Enabled!');
-                    document.getElementById('master-pin-input').value = '';
-                } else alert('Please enter at least 4 digits PIN.');
-            });
-
-            document.getElementById('clear-pin-btn').addEventListener('click', () => {
-                state.masterPin = '';
-                saveStateToStorage();
-                updateSecurityIcon();
-                showNotification('PIN Protection Disabled');
-            });
-
-            // Export / Import
-            document.getElementById('export-backup-btn').addEventListener('click', exportBackup);
-            document.getElementById('import-backup-file').addEventListener('change', importBackup);
+        function loadDefaultIptvOrg() {
+            const url = 'https://iptv-org.github.io/iptv/index.m3u';
+            fetchM3U(url);
         }
 
-        function toggleSidebar() {
-            el.sidebar.classList.toggle('-translate-x-full');
-            el.sidebarOverlay.classList.toggle('hidden');
+        function switchTab(tab) {
+            document.getElementById('panelM3u').classList.toggle('hidden', tab !== 'm3u');
+            document.getElementById('panelXtream').classList.toggle('hidden', tab !== 'xtream');
+            document.getElementById('tabM3u').className = tab === 'm3u' ? 'flex-1 pb-2 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500' : 'flex-1 pb-2 text-xs font-semibold text-slate-400 hover:text-slate-200';
+            document.getElementById('tabXtream').className = tab === 'xtream' ? 'flex-1 pb-2 text-xs font-semibold text-indigo-400 border-b-2 border-indigo-500' : 'flex-1 pb-2 text-xs font-semibold text-slate-400 hover:text-slate-200';
         }
 
-        function setViewMode(mode) {
-            state.viewMode = mode;
-            if (mode === 'grid') {
-                el.viewGridBtn.className = 'px-2 py-1 rounded text-xs text-blue-400 bg-slate-800';
-                el.viewListBtn.className = 'px-2 py-1 rounded text-xs text-slate-400 hover:text-white';
-                el.channelGrid.className = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2.5 sm:gap-3';
-            } else {
-                el.viewListBtn.className = 'px-2 py-1 rounded text-xs text-blue-400 bg-slate-800';
-                el.viewGridBtn.className = 'px-2 py-1 rounded text-xs text-slate-400 hover:text-white';
-                el.channelGrid.className = 'flex flex-col space-y-2';
-            }
-            renderChannels(state.filteredChannels);
+        function toggleProxy() {
+            useProxy = !useProxy;
+            document.getElementById('proxyStatus').innerText = useProxy ? 'Corsproxy.io' : 'Direct';
+            document.getElementById('proxyBtn').classList.toggle('bg-emerald-950', useProxy);
+            document.getElementById('proxyBtn').classList.toggle('border-emerald-700', useProxy);
         }
 
-        function updateSecurityIcon() {
-            const icon = document.getElementById('security-lock-icon');
-            if (state.masterPin) {
-                icon.className = 'fa-solid fa-lock text-amber-400';
-            } else {
-                icon.className = 'fa-solid fa-shield-halved text-slate-400';
-            }
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        function hideError() {
+            document.getElementById('errorLog').classList.add('hidden');
         }
 
-        async function fetchWithFallback(url) {
-            if (state.proxyMode !== 'auto' && state.proxyMode !== 'none') {
-                const pFn = PROXIES[state.proxyMode];
-                if (pFn) return await fetch(pFn(url));
-            }
-
-            if (state.proxyMode === 'none') return await fetch(url);
-
-            // Auto Fallback Sequence
-            try {
-                const r = await fetch(url);
-                if (r.ok) return r;
-            } catch (e) {}
-
-            for (const key of ['corsproxy', 'allorigins', 'thingproxy']) {
-                try {
-                    const proxyUrl = PROXIES[key](url);
-                    const res = await fetch(proxyUrl);
-                    if (res.ok) return res;
-                } catch (err) {}
-            }
-            throw new Error('All CORS proxies failed to fetch target URL.');
+        function showError(msg) {
+            document.getElementById('errorLog').classList.remove('hidden');
+            document.getElementById('errorMessage').innerText = msg;
         }
 
-        async function handleXtreamSubmit(e) {
-            e.preventDefault();
-            const name = document.getElementById('xtream-name').value.trim();
-            let host = document.getElementById('xtream-host').value.trim().replace(/\/+$|\/player_api\.php/g, "");
-            const user = document.getElementById('xtream-user').value.trim();
-            const pass = document.getElementById('xtream-pass').value.trim();
-
-            if (!host.startsWith('http://') && !host.startsWith('https://')) {
-                host = 'http://' + host;
-            }
-
-            showLoadingPlaceholder('Authenticating with Xtream Server...');
-            el.playlistModal.classList.add('hidden');
+        async function fetchM3U(url) {
+            hideError();
+            document.getElementById('playerStatus').innerText = "Fetching playlist details...";
+            closeModal('playlistModal');
 
             try {
-                const catUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_live_categories`;
-                const catRes = await fetchWithFallback(catUrl);
-                const categories = await catRes.json();
-                
-                const catMap = {};
-                if (Array.isArray(categories)) categories.forEach(c => catMap[c.category_id] = c.category_name);
-
-                const streamUrl = `${host}/player_api.php?username=${user}&password=${pass}&action=get_live_streams`;
-                const streamRes = await fetchWithFallback(streamUrl);
-                const streams = await streamRes.json();
-
-                if (!Array.isArray(streams)) throw new Error('Invalid authentication response');
-
-                const parsedChannels = streams.map(s => ({
-                    id: 'xtream-' + s.stream_id,
-                    name: s.name,
-                    logo: s.stream_icon || '',
-                    group: catMap[s.category_id] || 'General',
-                    url: `${host}/live/${user}/${pass}/${s.stream_id}.m3u8`
-                }));
-
-                const newPlaylist = {
-                    id: 'pl-' + Date.now(),
-                    name: name,
-                    type: 'xtream',
-                    credentials: { host, user, pass },
-                    channels: parsedChannels
-                };
-
-                state.playlists.push(newPlaylist);
-                saveStateToStorage();
-                renderSavedPlaylistsList();
-                activatePlaylist(newPlaylist);
-                showNotification(`Added ${parsedChannels.length} streams!`);
+                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(url) : url;
+                const response = await fetch(targetUrl);
+                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                const text = await response.text();
+                parseM3UText(text);
             } catch (err) {
-                console.error(err);
-                showPlayerError(`Xtream Error: ${err.message}. Try switching Proxy mode to Corsproxy.io.`);
+                showError(`Failed to load M3U: ${err.message}. If HTTPS/CORS restricts playback, toggle Proxy mode at top right.`);
+                document.getElementById('playerStatus').innerText = "Failed to load playlist.";
             }
         }
 
-        function parseM3U(content) {
-            const lines = content.split(/\r?\n/);
-            const channels = [];
-            let current = null;
+        function loadM3uUrl() {
+            const url = document.getElementById('m3uUrlInput').value.trim();
+            if (url) fetchM3U(url);
+        }
+
+        function parseM3UText(text) {
+            const lines = text.split('\n');
+            let channels = [];
+            let currentItem = {};
 
             for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
+                let line = lines[i].trim();
                 if (line.startsWith('#EXTINF:')) {
-                    current = {};
-                    const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
-                    if (logoMatch) current.logo = logoMatch[1];
-                    const groupMatch = line.match(/group-title="([^"]*)"/i);
-                    current.group = groupMatch ? groupMatch[1] : 'Uncategorized';
-                    const comma = line.lastIndexOf(',');
-                    current.name = comma !== -1 ? line.substring(comma + 1).trim() : 'Channel ' + (channels.length + 1);
-                    current.id = 'm3u-' + Math.random().toString(36).substring(2, 9);
-                } else if (line.length > 0 && !line.startsWith('#') && current) {
-                    current.url = line;
-                    channels.push(current);
-                    current = null;
+                    const nameMatch = line.match(/,(.+)$/);
+                    const name = nameMatch ? nameMatch[1].trim() : 'Unnamed Channel';
+                    
+                    const groupMatch = line.match(/group-title="([^"]+)"/i);
+                    const group = groupMatch ? groupMatch[1] : 'General';
+
+                    const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
+                    const logo = logoMatch ? logoMatch[1] : '';
+
+                    currentItem = { name, group, logo };
+                } else if (line.length > 0 && !line.startsWith('#')) {
+                    currentItem.url = line;
+                    channels.push(currentItem);
+                    currentItem = {};
+                    if (channels.length >= SAFETY_CHANNEL_CAP) break; // Memory safety cap for Tesla browser
                 }
             }
-            return channels;
+
+            allChannels = channels;
+            populateCategories();
+            filterChannels();
+            document.getElementById('playerStatus').innerText = `Loaded ${channels.length} channels. Click a channel to play.`;
         }
 
-        async function handleM3uUrlSubmit(e) {
-            e.preventDefault();
-            const name = document.getElementById('m3u-url-name').value.trim();
-            const url = document.getElementById('m3u-url-val').value.trim();
+        async function loadXtreamApi() {
+            const server = document.getElementById('xcServer').value.trim();
+            const user = document.getElementById('xcUser').value.trim();
+            const pass = document.getElementById('xcPass').value.trim();
 
-            showLoadingPlaceholder('Fetching M3U Link...');
-            el.playlistModal.classList.add('hidden');
-
-            try {
-                const res = await fetchWithFallback(url);
-                const content = await res.text();
-                const parsed = parseM3U(content);
-
-                if (parsed.length === 0) throw new Error('No channels found in file');
-
-                const newPlaylist = { id: 'pl-' + Date.now(), name, type: 'm3u-url', channels: parsed };
-                state.playlists.push(newPlaylist);
-                saveStateToStorage();
-                renderSavedPlaylistsList();
-                activatePlaylist(newPlaylist);
-                showNotification(`Loaded ${parsed.length} channels.`);
-            } catch (err) {
-                alert(`Error loading M3U: ${err.message}`);
-                hideLoadingPlaceholder();
-            }
-        }
-
-        function handleM3uFileSubmit(e) {
-            e.preventDefault();
-            const name = document.getElementById('m3u-file-name').value.trim();
-            const file = document.getElementById('m3u-file-input').files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                const parsed = parseM3U(evt.target.result);
-                if (parsed.length === 0) return alert('Invalid M3U payload');
-                const newPlaylist = { id: 'pl-' + Date.now(), name: name || file.name, type: 'm3u-file', channels: parsed };
-                state.playlists.push(newPlaylist);
-                saveStateToStorage();
-                renderSavedPlaylistsList();
-                activatePlaylist(newPlaylist);
-                el.playlistModal.classList.add('hidden');
-                showNotification(`Loaded ${parsed.length} channels`);
-            };
-            reader.readAsText(file);
-        }
-
-        function loadPresetChannels() {
-            state.channels = PRESET_CHANNELS;
-            state.activePlaylistId = 'preset';
-            el.activePlaylistBadge.textContent = 'Demo Streams';
-            processLoadedChannels();
-        }
-
-        function activatePlaylist(playlist) {
-            state.activePlaylistId = playlist.id;
-            state.channels = playlist.channels;
-            el.activePlaylistBadge.textContent = playlist.name;
-            saveStateToStorage();
-            processLoadedChannels();
-        }
-
-        function renderSavedPlaylistsList() {
-            el.savedPlaylistsList.innerHTML = '';
-            
-            // Preset Item
-            const pItem = document.createElement('div');
-            pItem.className = `p-3 rounded-lg border flex items-center justify-between text-xs ${state.activePlaylistId === 'preset' ? 'border-blue-500/50 bg-blue-500/10' : 'border-slate-800 bg-slate-900'}`;
-            pItem.innerHTML = `
-                <div>
-                    <div class="font-semibold text-white">Demo Streams (Preset)</div>
-                    <div class="text-[10px] text-slate-400">5 sample live streams</div>
-                </div>
-                <button class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-400 font-medium transition" onclick="loadPresetChannels(); el.playlistModal.classList.add('hidden');">Select</button>
-            `;
-            el.savedPlaylistsList.appendChild(pItem);
-
-            state.playlists.forEach(pl => {
-                const item = document.createElement('div');
-                item.className = `p-3 rounded-lg border flex items-center justify-between text-xs ${state.activePlaylistId === pl.id ? 'border-blue-500/50 bg-blue-500/10' : 'border-slate-800 bg-slate-900'}`;
-                item.innerHTML = `
-                    <div class="truncate mr-2">
-                        <div class="font-semibold text-white truncate">${pl.name}</div>
-                        <div class="text-[10px] text-slate-400 uppercase tracking-wider">${pl.type} • ${pl.channels.length} channels</div>
-                    </div>
-                    <div class="flex items-center space-x-1 shrink-0">
-                        <button class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-blue-400 font-medium transition" onclick="activateSavedPlaylist('${pl.id}')">Select</button>
-                        <button class="p-1.5 text-slate-500 hover:text-red-400 transition" onclick="deletePlaylist('${pl.id}')"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                `;
-                el.savedPlaylistsList.appendChild(item);
-            });
-        }
-
-        window.activateSavedPlaylist = function(id) {
-            if (state.masterPin) {
-                const input = prompt('Enter Security PIN to unlock saved server details:');
-                if (input !== state.masterPin) return alert('Incorrect PIN!');
-            }
-            const pl = state.playlists.find(p => p.id === id);
-            if (pl) {
-                activatePlaylist(pl);
-                el.playlistModal.classList.add('hidden');
-            }
-        };
-
-        window.deletePlaylist = function(id) {
-            state.playlists = state.playlists.filter(p => p.id !== id);
-            saveStateToStorage();
-            renderSavedPlaylistsList();
-            if (state.activePlaylistId === id) loadPresetChannels();
-        };
-
-        function processLoadedChannels() {
-            state.categories.clear();
-            state.channels.forEach(ch => { if (ch.group) state.categories.add(ch.group); });
-            renderCategoryList();
-            setActiveCategory('__ALL__');
-            updateCategoryCounts();
-        }
-
-        function renderCategoryList() {
-            const dynamicItems = el.categoryList.querySelectorAll('.dynamic-cat');
-            dynamicItems.forEach(i => i.remove());
-
-            Array.from(state.categories).sort().forEach(cat => {
-                const count = state.channels.filter(c => c.group === cat).length;
-                const btn = document.createElement('button');
-                btn.dataset.category = cat;
-                btn.className = 'category-btn dynamic-cat w-full flex items-center justify-between px-3 py-2 rounded-lg text-slate-300 hover:bg-slate-800/80 text-xs transition';
-                btn.innerHTML = `
-                    <span class="truncate mr-2 flex items-center space-x-2.5">
-                        <i class="fa-regular fa-folder text-slate-400"></i>
-                        <span class="truncate">${cat}</span>
-                    </span>
-                    <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400 shrink-0">${count}</span>
-                `;
-                el.categoryList.appendChild(btn);
-            });
-        }
-
-        function setActiveCategory(cat) {
-            state.activeCategory = cat;
-            document.querySelectorAll('.category-btn').forEach(b => {
-                if (b.dataset.category === cat) b.classList.add('bg-blue-600/20', 'text-blue-400', 'font-medium');
-                else b.classList.remove('bg-blue-600/20', 'text-blue-400', 'font-medium');
-            });
-            el.currentCatLabel.textContent = cat === '__ALL__' ? 'All Channels' : (cat === '__FAV__' ? 'Favorites' : cat);
-            filterAndRenderChannels(el.channelSearch.value);
-        }
-
-        function filterAndRenderChannels(q = '') {
-            let filtered = state.channels;
-            if (state.activeCategory === '__FAV__') filtered = filtered.filter(c => state.favorites.has(c.id));
-            else if (state.activeCategory !== '__ALL__') filtered = filtered.filter(c => c.group === state.activeCategory);
-
-            if (q.trim()) filtered = filtered.filter(c => c.name.toLowerCase().includes(q.toLowerCase()));
-
-            state.filteredChannels = filtered;
-            el.channelCountBadge.textContent = filtered.length;
-            renderChannels(filtered);
-        }
-
-        function updateCategoryCounts() {
-            el.countAll.textContent = state.channels.length;
-            el.countFav.textContent = state.favorites.size;
-        }
-
-        function renderChannels(channels) {
-            el.channelGrid.innerHTML = '';
-            if (channels.length === 0) {
-                el.channelGrid.innerHTML = `
-                    <div class="col-span-full py-12 flex flex-col items-center justify-center text-slate-500">
-                        <i class="fa-solid fa-tv text-4xl mb-2 text-slate-700"></i>
-                        <p class="text-sm font-medium">No channels found</p>
-                    </div>`;
+            if (!server || !user || !pass) {
+                alert("Please fill in all Xtream credentials");
                 return;
             }
 
-            channels.forEach(ch => {
-                const isActive = state.currentChannel && state.currentChannel.id === ch.id;
-                const isFav = state.favorites.has(ch.id);
-                const card = document.createElement('div');
+            hideError();
+            closeModal('playlistModal');
+            document.getElementById('playerStatus').innerText = "Connecting to Xtream API...";
 
-                if (state.viewMode === 'grid') {
-                    card.className = `group relative bg-slate-900 border ${isActive ? 'border-blue-500 ring-2 ring-blue-500/20' : 'border-slate-800 hover:border-slate-700'} rounded-xl p-3 flex flex-col items-center text-center cursor-pointer transition transform active:scale-95`;
-                    card.innerHTML = `
-                        <button class="fav-quick-toggle absolute top-2 right-2 text-xs ${isFav ? 'text-amber-400' : 'text-slate-600 opacity-0 group-hover:opacity-100'} hover:scale-110 transition" data-id="${ch.id}">
-                            <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
-                        </button>
-                        <div class="w-12 h-12 rounded-lg bg-slate-950 flex items-center justify-center overflow-hidden my-1 border border-slate-800">
-                            ${ch.logo ? `<img src="${ch.logo}" class="w-full h-full object-contain p-1" onerror="this.outerHTML='<i class=\\'fa-solid fa-tv text-slate-600 text-lg\\'></i>'">` : `<i class="fa-solid fa-tv text-slate-600 text-lg"></i>`}
-                        </div>
-                        <div class="w-full mt-2">
-                            <h4 class="font-semibold text-xs text-slate-200 truncate group-hover:text-blue-400 transition">${ch.name}</h4>
-                            <p class="text-[10px] text-slate-500 truncate mt-0.5">${ch.group || 'IPTV'}</p>
-                        </div>
-                    `;
+            const cleanServer = server.endsWith('/') ? server.slice(0, -1) : server;
+            const apiUrl = `${cleanServer}/player_api.php?username=${user}&password=${pass}&action=get_live_streams`;
+
+            try {
+                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(apiUrl) : apiUrl;
+                const res = await fetch(targetUrl);
+                const data = await res.json();
+                
+                if (Array.isArray(data)) {
+                    allChannels = data.slice(0, SAFETY_CHANNEL_CAP).map(item => ({
+                        name: item.name,
+                        group: item.category_id || 'Xtream Stream',
+                        logo: item.stream_icon || '',
+                        url: `${cleanServer}/live/${user}/${pass}/${item.stream_id}.m3u8`
+                    }));
+                    populateCategories();
+                    filterChannels();
+                    document.getElementById('playerStatus').innerText = `Loaded ${allChannels.length} streams.`;
                 } else {
-                    card.className = `group bg-slate-900 border ${isActive ? 'border-blue-500' : 'border-slate-800 hover:border-slate-700'} rounded-lg p-2.5 flex items-center justify-between cursor-pointer transition`;
-                    card.innerHTML = `
-                        <div class="flex items-center space-x-3 truncate">
-                            <div class="w-8 h-8 rounded bg-slate-950 flex items-center justify-center overflow-hidden shrink-0 border border-slate-800">
-                                ${ch.logo ? `<img src="${ch.logo}" class="w-full h-full object-contain p-0.5" onerror="this.outerHTML='<i class=\\'fa-solid fa-tv text-slate-600 text-xs\\'></i>'">` : `<i class="fa-solid fa-tv text-slate-600 text-xs"></i>`}
-                            </div>
-                            <div class="truncate">
-                                <h4 class="font-semibold text-xs text-slate-200 truncate group-hover:text-blue-400 transition">${ch.name}</h4>
-                                <p class="text-[10px] text-slate-500 truncate">${ch.group || 'IPTV'}</p>
-                            </div>
-                        </div>
-                        <button class="fav-quick-toggle p-1 text-xs ${isFav ? 'text-amber-400' : 'text-slate-600'}" data-id="${ch.id}">
-                            <i class="${isFav ? 'fa-solid' : 'fa-regular'} fa-star"></i>
-                        </button>
-                    `;
+                    throw new Error("Invalid response payload from server.");
                 }
+            } catch (err) {
+                showError(`Xtream API Error: ${err.message}. Try toggling CORS Proxy mode.`);
+            }
+        }
 
-                card.addEventListener('click', (e) => {
-                    if (e.target.closest('.fav-quick-toggle')) {
-                        e.stopPropagation();
-                        if (state.favorites.has(ch.id)) state.favorites.delete(ch.id);
-                        else state.favorites.add(ch.id);
-                        saveStateToStorage();
-                        updateCategoryCounts();
-                        renderChannels(state.filteredChannels);
-                        if (state.currentChannel && state.currentChannel.id === ch.id) updateFavoriteBtnState();
-                        return;
-                    }
-                    playChannel(ch);
-                });
-
-                el.channelGrid.appendChild(card);
+        function populateCategories() {
+            const catSelect = document.getElementById('categorySelect');
+            const groups = [...new Set(allChannels.map(c => c.group))].sort();
+            catSelect.innerHTML = '<option value="ALL">All Categories</option><option value="FAV">Favorites Only</option>';
+            groups.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.innerText = g;
+                catSelect.appendChild(opt);
             });
         }
 
-        function playChannel(channel) {
-            state.currentChannel = channel;
-            el.nowPlayingTitle.textContent = channel.name;
-            el.nowPlayingGroup.textContent = channel.group || 'Live Stream';
-            el.toggleFavoriteBtn.disabled = false;
-            updateFavoriteBtnState();
+        function filterChannels() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const cat = document.getElementById('categorySelect').value;
 
-            if (channel.logo) {
-                el.nowPlayingLogo.src = channel.logo;
-                el.nowPlayingLogo.classList.remove('hidden');
-                el.nowPlayingIcon.classList.add('hidden');
+            filteredChannels = allChannels.filter(c => {
+                const matchesSearch = c.name.toLowerCase().includes(search);
+                const matchesFav = cat === 'FAV' ? favorites.includes(c.url) : true;
+                const matchesCat = (cat === 'ALL' || cat === 'FAV') ? true : c.group === cat;
+                return matchesSearch && matchesFav && matchesCat;
+            });
+
+            currentPage = 1;
+            renderChannelGrid();
+        }
+
+        function renderChannelGrid() {
+            const grid = document.getElementById('channelGrid');
+            grid.innerHTML = '';
+
+            const totalPages = Math.ceil(filteredChannels.length / itemsPerPage) || 1;
+            document.getElementById('pageIndicator').innerText = `Page ${currentPage} of ${totalPages}`;
+            document.getElementById('channelCount').innerText = `${filteredChannels.length} Channels`;
+
+            document.getElementById('prevPageBtn').disabled = currentPage === 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+
+            const start = (currentPage - 1) * itemsPerPage;
+            const pageChannels = filteredChannels.slice(start, start + itemsPerPage);
+
+            pageChannels.forEach(ch => {
+                const isFav = favorites.includes(ch.url);
+                const card = document.createElement('div');
+                card.className = "bg-slate-950 border border-slate-800 p-2.5 rounded-lg hover:border-indigo-500 cursor-pointer flex items-center justify-between transition group";
+                card.onclick = () => playStream(ch);
+
+                card.innerHTML = `
+                    <div class="flex items-center space-x-2.5 overflow-hidden">
+                        <div class="w-8 h-8 rounded bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+                            ${ch.logo ? `<img src="${ch.logo}" class="w-full h-full object-cover" onerror="this.remove()">` : ''}
+                            <i class="fa-solid fa-play text-xs text-indigo-400"></i>
+                        </div>
+                        <div class="truncate">
+                            <h4 class="text-xs font-semibold text-slate-200 group-hover:text-indigo-400 truncate">${ch.name}</h4>
+                            <p class="text-[10px] text-slate-400 truncate">${ch.group}</p>
+                        </div>
+                    </div>
+                    <button onclick="event.stopPropagation(); toggleFavorite('${ch.url}')" class="text-slate-600 hover:text-amber-400 p-1">
+                        <i class="${isFav ? 'fa-solid text-amber-400' : 'fa-regular'} fa-star text-xs"></i>
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function changePage(delta) {
+            currentPage += delta;
+            renderChannelGrid();
+        }
+
+        function toggleFavorite(url) {
+            if (favorites.includes(url)) {
+                favorites = favorites.filter(f => f !== url);
             } else {
-                el.nowPlayingLogo.classList.add('hidden');
-                el.nowPlayingIcon.classList.remove('hidden');
+                favorites.push(url);
+            }
+            localStorage.setItem('sp_favs', JSON.stringify(favorites));
+            filterChannels();
+            updateFavCurrentBtn();
+        }
+
+        function toggleFavoriteCurrent() {
+            if (currentChannel) toggleFavorite(currentChannel.url);
+        }
+
+        function updateFavCurrentBtn() {
+            const btn = document.getElementById('favCurrentBtn');
+            if (currentChannel && favorites.includes(currentChannel.url)) {
+                btn.className = "text-amber-400 text-xl transition";
+                btn.innerHTML = '<i class="fa-solid fa-star"></i>';
+            } else {
+                btn.className = "text-slate-600 hover:text-amber-400 text-xl transition";
+                btn.innerHTML = '<i class="fa-regular fa-star"></i>';
+            }
+        }
+
+        function playStream(ch) {
+            hideError();
+            currentChannel = ch;
+            document.getElementById('currentChannelName').innerText = ch.name;
+            document.getElementById('currentChannelCategory').innerText = ch.group;
+            updateFavCurrentBtn();
+
+            document.getElementById('playerOverlay').classList.remove('hidden');
+            document.getElementById('playerStatus').innerText = "Connecting to stream...";
+
+            const video = document.getElementById('videoPlayer');
+            let streamUrl = ch.url;
+
+            if (useProxy) {
+                streamUrl = PROXY_URL + encodeURIComponent(streamUrl);
             }
 
-            renderChannels(state.filteredChannels);
+            // Memory optimized HLS configuration for Tesla browser
+            if (Hls.isSupported()) {
+                if (hlsPlayer) {
+                    hlsPlayer.destroy();
+                }
 
-            let streamUrl = channel.url;
-            if (state.proxyMode !== 'none' && state.proxyMode !== 'auto') {
-                const proxyFn = PROXIES[state.proxyMode];
-                if (proxyFn) streamUrl = proxyFn(streamUrl);
-            }
-
-            showLoadingPlaceholder(`Buffering ${channel.name}...`);
-
-            if (hlsInstance) {
-                hlsInstance.destroy();
-                hlsInstance = null;
-            }
-
-            const video = el.videoPlayer;
-
-            if (Hls.isSupported() && (streamUrl.includes('.m3u8') || streamUrl.includes('/live/'))) {
-                hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: true });
-                hlsInstance.loadSource(streamUrl);
-                hlsInstance.attachMedia(video);
-                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                    hideLoadingPlaceholder();
-                    video.play().catch(e => console.warn('Autoplay prevented', e));
+                hlsPlayer = new Hls({
+                    maxBufferLength: 10,           // Caps buffer at 10s to conserve Tesla RAM
+                    maxMaxBufferLength: 20,
+                    maxBufferSize: 10 * 1024 * 1024, // Hard limit RAM buffer to 10MB
+                    enableWorker: false             // Prevents worker process crashes in Chromium
                 });
-                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+
+                hlsPlayer.loadSource(streamUrl);
+                hlsPlayer.attachMedia(video);
+
+                hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                    document.getElementById('playerOverlay').classList.add('hidden');
+                    video.play().catch(() => {});
+                });
+
+                hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        showPlayerError('Stream error. Try toggling Corsproxy.io in top right menu.');
+                        showError(`Stream Error: Unable to play video segment. If on HTTPS, try enabling Proxy mode.`);
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = streamUrl;
-                video.addEventListener('loadedmetadata', () => { hideLoadingPlaceholder(); video.play(); });
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('playerOverlay').classList.add('hidden');
+                    video.play();
+                });
             } else {
-                video.src = streamUrl;
-                video.play().then(() => hideLoadingPlaceholder()).catch(() => showPlayerError('Playback blocked or unsupported format.'));
+                showError("HLS video playback is not supported in this browser.");
             }
-        }
-
-        function showLoadingPlaceholder(msg) {
-            el.playerPlaceholder.classList.remove('hidden');
-            el.playerSpinner.classList.remove('hidden');
-            el.playerIcon.classList.add('hidden');
-            el.playerStatusTitle.textContent = msg;
-            el.playerStatusDesc.textContent = 'Please wait...';
-        }
-
-        function hideLoadingPlaceholder() {
-            el.playerPlaceholder.classList.add('hidden');
-        }
-
-        function showPlayerError(msg) {
-            el.playerPlaceholder.classList.remove('hidden');
-            el.playerSpinner.classList.add('hidden');
-            el.playerIcon.className = 'fa-solid fa-triangle-exclamation text-5xl text-red-500 mb-3';
-            el.playerStatusTitle.textContent = 'Playback Failed';
-            el.playerStatusDesc.textContent = msg;
-        }
-
-        function updateFavoriteBtnState() {
-            if (!state.currentChannel) return;
-            const isFav = state.favorites.has(state.currentChannel.id);
-            el.favIcon.className = isFav ? 'fa-solid fa-star text-amber-400 text-base' : 'fa-regular fa-star text-slate-400 text-base';
-        }
-
-        function switchTab(tab) {
-            ['saved', 'xtream', 'm3u-url', 'm3u-file'].forEach(t => {
-                const btn = document.getElementById(`tab-btn-${t}`);
-                const view = t === 'saved' ? el.viewSavedPlaylists : document.getElementById(`form-${t}`);
-                if (t === tab) {
-                    btn.className = 'pb-2 border-b-2 border-blue-500 text-blue-400 font-medium';
-                    view.classList.remove('hidden');
-                } else {
-                    btn.className = 'pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200';
-                    view.classList.add('hidden');
-                }
-            });
-        }
-
-        function exportBackup() {
-            const backup = {
-                playlists: state.playlists,
-                favorites: Array.from(state.favorites),
-                exportDate: new Date().toISOString()
-            };
-            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `streampulse_backup_${Date.now()}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-            showNotification('Backup exported successfully!');
-        }
-
-        function importBackup(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const data = JSON.parse(evt.target.result);
-                    if (data.playlists) state.playlists = data.playlists;
-                    if (data.favorites) state.favorites = new Set(data.favorites);
-                    saveStateToStorage();
-                    renderSavedPlaylistsList();
-                    updateCategoryCounts();
-                    showNotification('Backup imported successfully!');
-                    el.securityModal.classList.add('hidden');
-                } catch (err) {
-                    alert('Invalid backup file format');
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function showNotification(msg) {
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-xl transition transform duration-300 translate-y-2 opacity-0';
-            toast.textContent = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
-            setTimeout(() => {
-                toast.classList.add('translate-y-2', 'opacity-0');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
         }
     </script>
 </body>
