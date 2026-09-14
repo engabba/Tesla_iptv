@@ -28,10 +28,12 @@
             </h1>
         </div>
         <div class="flex items-center space-x-2">
-            <!-- CORS Proxy Toggle -->
-            <button id="proxyBtn" onclick="toggleProxy()" class="px-2 py-1 text-[11px] font-semibold rounded border border-emerald-700 bg-emerald-950 text-slate-300 hover:bg-slate-700 transition">
-                <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> Proxy: <span id="proxyStatus">Corsproxy.io</span>
-            </button>
+            <!-- CORS Proxy Mode Selector -->
+            <select id="proxySelect" onchange="changeProxyMode()" class="px-2 py-1 text-[11px] font-semibold rounded border border-slate-700 bg-slate-800 text-slate-300 focus:outline-none">
+                <option value="direct">Direct Mode (No Proxy)</option>
+                <option value="allorigins" selected>Proxy: AllOrigins</option>
+                <option value="corsfix">Proxy: CORS.sh</option>
+            </select>
             <!-- Setup Modal Trigger -->
             <button onclick="openModal('playlistModal')" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition">
                 <i class="fa-solid fa-list-ul text-sm"></i>
@@ -48,7 +50,7 @@
                 <video id="videoPlayer" class="w-full h-full object-contain" controls autoplay playsinline></video>
                 <div id="playerOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 p-4 text-center z-10">
                     <i id="playerIcon" class="fa-solid fa-play-circle text-4xl text-indigo-500 mb-2 animate-pulse"></i>
-                    <p id="playerStatus" class="text-xs font-medium text-slate-300">Choose Option 1 or Option 2 to load channels</p>
+                    <p id="playerStatus" class="text-xs font-medium text-slate-300">Select Option 1 or Option 2 to load channels</p>
                 </div>
             </div>
 
@@ -64,9 +66,9 @@
             </div>
 
             <!-- Error Log -->
-            <div id="errorLog" class="hidden p-2 bg-red-950/80 border-t border-red-800 text-red-200 text-[11px] shrink-0">
+            <div id="errorLog" class="hidden p-2 bg-red-950/90 border-t border-red-800 text-red-200 text-[11px] shrink-0">
                 <div class="flex items-center space-x-1.5">
-                    <i class="fa-solid fa-circle-exclamation text-red-400"></i>
+                    <i class="fa-solid fa-circle-exclamation text-red-400 shrink-0"></i>
                     <div id="errorMessage" class="truncate">Error details will appear here.</div>
                 </div>
             </div>
@@ -93,7 +95,6 @@
 
             <!-- Channel Grid Scroll Area -->
             <div id="channelGrid" class="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
-                <!-- Welcome Prompt before loading channels -->
                 <div class="text-center py-8 text-slate-400 space-y-3">
                     <p class="text-xs">No playlist loaded yet.</p>
                     <button onclick="openModal('playlistModal')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold">
@@ -112,7 +113,7 @@
         </div>
     </div>
 
-    <!-- Playlist Source Selection Modal (Opens automatically on launch) -->
+    <!-- Setup Modal -->
     <div id="playlistModal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div class="px-4 py-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
@@ -121,7 +122,7 @@
             </div>
 
             <div class="p-4 space-y-4">
-                <!-- Option 1: Public M3U Playlist -->
+                <!-- Option 1: M3U -->
                 <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
                     <div class="flex items-center space-x-2">
                         <span class="px-2 py-0.5 bg-indigo-900/60 text-indigo-300 text-[10px] font-bold rounded">OPTION 1</span>
@@ -133,7 +134,7 @@
                     </button>
                 </div>
 
-                <!-- Option 2: Xtream Server -->
+                <!-- Option 2: Xtream -->
                 <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
                     <div class="flex items-center space-x-2">
                         <span class="px-2 py-0.5 bg-emerald-900/60 text-emerald-300 text-[10px] font-bold rounded">OPTION 2</span>
@@ -163,7 +164,7 @@
         </div>
     </div>
 
-    <!-- Application Logic -->
+    <!-- Script Logic -->
     <script>
         let allChannels = [];
         let filteredChannels = [];
@@ -172,23 +173,25 @@
         let currentPage = 1;
         const itemsPerPage = 40;
         let hlsPlayer = null;
-        let useProxy = true; // Enabled by default for HTTP/CORS support
-        const PROXY_URL = 'https://corsproxy.io/?';
+        let activeProxyMode = 'allorigins';
         const SAFETY_CHANNEL_CAP = 2000;
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Auto-fill saved password if previously stored
             const savedPass = localStorage.getItem('sp_xt_pass');
             if (savedPass) {
                 document.getElementById('opt2Pass').value = savedPass;
             }
         });
 
-        function toggleProxy() {
-            useProxy = !useProxy;
-            document.getElementById('proxyStatus').innerText = useProxy ? 'Corsproxy.io' : 'Direct';
-            document.getElementById('proxyBtn').classList.toggle('bg-emerald-950', useProxy);
-            document.getElementById('proxyBtn').classList.toggle('border-emerald-700', useProxy);
+        function changeProxyMode() {
+            activeProxyMode = document.getElementById('proxySelect').value;
+        }
+
+        function getProxiedUrl(targetUrl) {
+            if (activeProxyMode === 'direct') return targetUrl;
+            if (activeProxyMode === 'allorigins') return `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            if (activeProxyMode === 'corsfix') return `https://proxy.cors.sh/${targetUrl}`;
+            return targetUrl;
         }
 
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
@@ -199,7 +202,6 @@
             document.getElementById('errorMessage').innerText = msg;
         }
 
-        // Option 1 Handler
         function loadOption1() {
             fetchM3U('https://iptv-org.github.io/iptv/index.m3u');
         }
@@ -210,13 +212,13 @@
             closeModal('playlistModal');
 
             try {
-                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(url) : url;
+                const targetUrl = getProxiedUrl(url);
                 const response = await fetch(targetUrl);
                 if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
                 const text = await response.text();
                 parseM3UText(text);
             } catch (err) {
-                showError(`Option 1 Error: ${err.message}. Try toggling proxy.`);
+                showError(`Option 1 Error: ${err.message}. Try changing Proxy Mode in the header.`);
                 document.getElementById('playerStatus').innerText = "Failed to load M3U playlist.";
             }
         }
@@ -250,7 +252,6 @@
             document.getElementById('playerStatus').innerText = `Loaded ${channels.length} channels. Tap a channel to play.`;
         }
 
-        // Option 2 Handler
         async function loadOption2() {
             let server = document.getElementById('opt2Server').value.trim();
             const user = document.getElementById('opt2User').value.trim();
@@ -261,9 +262,7 @@
                 return;
             }
 
-            // Save password locally for convenient re-use
             localStorage.setItem('sp_xt_pass', pass);
-
             hideError();
             closeModal('playlistModal');
             document.getElementById('playerStatus').innerText = "Connecting to Option 2 Xtream Server...";
@@ -272,7 +271,7 @@
             const apiUrl = `${server}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_live_streams`;
 
             try {
-                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(apiUrl) : apiUrl;
+                const targetUrl = getProxiedUrl(apiUrl);
                 const res = await fetch(targetUrl);
                 const rawText = await res.text();
                 
@@ -280,7 +279,7 @@
                 try {
                     data = JSON.parse(rawText);
                 } catch(e) {
-                    throw new Error("Invalid payload or authentication error.");
+                    throw new Error("Invalid response. Check password or toggle proxy header.");
                 }
 
                 if (Array.isArray(data)) {
@@ -294,10 +293,10 @@
                     filterChannels();
                     document.getElementById('playerStatus').innerText = `Loaded ${allChannels.length} Xtream channels.`;
                 } else {
-                    throw new Error("Authentication failed or channel list empty.");
+                    throw new Error("Authentication failed or channel line expired.");
                 }
             } catch (err) {
-                showError(`Option 2 Error: ${err.message}. Ensure credentials are correct & Proxy is enabled.`);
+                showError(`Option 2 Connection Error: ${err.message}`);
                 document.getElementById('playerStatus').innerText = "Xtream connection failed.";
             }
         }
@@ -410,11 +409,9 @@
             document.getElementById('playerStatus').innerText = "Connecting to stream...";
 
             const video = document.getElementById('videoPlayer');
+            
+            // Try direct stream connection first for maximum compatibility
             let streamUrl = ch.url;
-
-            if (useProxy) {
-                streamUrl = PROXY_URL + encodeURIComponent(streamUrl);
-            }
 
             if (Hls.isSupported()) {
                 if (hlsPlayer) {
@@ -438,7 +435,10 @@
 
                 hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        showError("Stream playback error. Toggle Proxy mode if CORS blocks video.");
+                        // Fall back to proxied stream if direct fetch triggers CORS block
+                        const proxiedStreamUrl = getProxiedUrl(ch.url);
+                        hlsPlayer.loadSource(proxiedStreamUrl);
+                        showError("Direct connection blocked. Retrying via proxy fallback...");
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -452,4 +452,3 @@
     </script>
 </body>
 </html>
-
