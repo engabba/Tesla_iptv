@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StreamPulse Offline IPTV Player</title>
+    <title>StreamPulse IPTV Player</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HLS.js for stream playback -->
@@ -28,10 +28,13 @@
             </h1>
         </div>
         <div class="flex items-center space-x-2">
-            <!-- Upload JSON Button -->
-            <button onclick="openModal('uploadModal')" class="px-2.5 py-1 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center space-x-1.5">
-                <i class="fa-solid fa-file-arrow-up text-xs"></i>
-                <span>Update Channels</span>
+            <!-- CORS Proxy Toggle -->
+            <button id="proxyBtn" onclick="toggleProxy()" class="px-2 py-1 text-[11px] font-semibold rounded border border-emerald-700 bg-emerald-950 text-slate-300 hover:bg-slate-700 transition">
+                <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i> Proxy: <span id="proxyStatus">Corsproxy.io</span>
+            </button>
+            <!-- Setup Modal Trigger -->
+            <button onclick="openModal('playlistModal')" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition">
+                <i class="fa-solid fa-list-ul text-sm"></i>
             </button>
         </div>
     </header>
@@ -45,7 +48,7 @@
                 <video id="videoPlayer" class="w-full h-full object-contain" controls autoplay playsinline></video>
                 <div id="playerOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 p-4 text-center z-10">
                     <i id="playerIcon" class="fa-solid fa-play-circle text-4xl text-indigo-500 mb-2 animate-pulse"></i>
-                    <p id="playerStatus" class="text-xs font-medium text-slate-300">Select a channel from the list to begin streaming</p>
+                    <p id="playerStatus" class="text-xs font-medium text-slate-300">Choose Option 1 or Option 2 to load channels</p>
                 </div>
             </div>
 
@@ -53,7 +56,7 @@
             <div class="p-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between shrink-0">
                 <div class="truncate">
                     <h2 id="currentChannelName" class="font-bold text-xs text-slate-100 truncate">No Channel Selected</h2>
-                    <p id="currentChannelCategory" class="text-[10px] text-slate-400 truncate">IPTV Offline Stream</p>
+                    <p id="currentChannelCategory" class="text-[10px] text-slate-400 truncate">IPTV Live Stream</p>
                 </div>
                 <button id="favCurrentBtn" onclick="toggleFavoriteCurrent()" class="text-slate-600 hover:text-amber-400 text-base transition px-2">
                     <i class="fa-star fa-regular"></i>
@@ -61,9 +64,9 @@
             </div>
 
             <!-- Error Log -->
-            <div id="errorLog" class="hidden p-2 bg-red-950/90 border-t border-red-800 text-red-200 text-[11px] shrink-0">
+            <div id="errorLog" class="hidden p-2 bg-red-950/80 border-t border-red-800 text-red-200 text-[11px] shrink-0">
                 <div class="flex items-center space-x-1.5">
-                    <i class="fa-solid fa-circle-exclamation text-red-400 shrink-0"></i>
+                    <i class="fa-solid fa-circle-exclamation text-red-400"></i>
                     <div id="errorMessage" class="truncate">Error details will appear here.</div>
                 </div>
             </div>
@@ -90,7 +93,13 @@
 
             <!-- Channel Grid Scroll Area -->
             <div id="channelGrid" class="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
-                <!-- Dynamic Channels Render Here -->
+                <!-- Welcome Prompt before loading channels -->
+                <div class="text-center py-8 text-slate-400 space-y-3">
+                    <p class="text-xs">No playlist loaded yet.</p>
+                    <button onclick="openModal('playlistModal')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold">
+                        Select Playlist Source
+                    </button>
+                </div>
             </div>
 
             <!-- Pagination Controls -->
@@ -103,32 +112,58 @@
         </div>
     </div>
 
-    <!-- Update Channels Modal -->
-    <div id="uploadModal" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+    <!-- Playlist Source Selection Modal (Opens automatically on launch) -->
+    <div id="playlistModal" class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
         <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-xl shadow-2xl overflow-hidden flex flex-col">
             <div class="px-4 py-3 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
-                <h3 class="font-semibold text-xs text-slate-100"><i class="fa-solid fa-file-import text-indigo-400 mr-2"></i>Update Channel File</h3>
-                <button onclick="closeModal('uploadModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+                <h3 class="font-semibold text-xs text-slate-100"><i class="fa-solid fa-sliders text-indigo-400 mr-2"></i>Select Playlist Source</h3>
+                <button onclick="closeModal('playlistModal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="p-4 space-y-4">
-                <p class="text-xs text-slate-400">Select your updated <code class="text-indigo-300">my_channels.json</code> file generated by the extractor tool to update your channels.</p>
-                
-                <input type="file" id="jsonFileInput" accept=".json" class="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
-
-                <div class="border-t border-slate-800 pt-3 flex space-x-2">
-                    <button onclick="loadUploadedFile()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold transition">
-                        Import & Save
+                <!-- Option 1: Public M3U Playlist -->
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 bg-indigo-900/60 text-indigo-300 text-[10px] font-bold rounded">OPTION 1</span>
+                        <h4 class="text-xs font-semibold text-slate-200">Public Free M3U List</h4>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Load streams from iptv-org GitHub playlist.</p>
+                    <button onclick="loadOption1()" class="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold transition">
+                        Load Free M3U Playlist
                     </button>
-                    <button onclick="clearSavedData()" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition">
-                        Reset Default
+                </div>
+
+                <!-- Option 2: Xtream Server -->
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 bg-emerald-900/60 text-emerald-300 text-[10px] font-bold rounded">OPTION 2</span>
+                        <h4 class="text-xs font-semibold text-slate-200">Xtream Codes Server</h4>
+                    </div>
+                    
+                    <div class="space-y-1.5 text-left">
+                        <div>
+                            <label class="block text-[10px] text-slate-400">Server URL</label>
+                            <input type="text" id="opt2Server" value="http://line.8kultradnscloud.ru" class="w-full bg-slate-900 border border-slate-800 rounded p-1 text-xs text-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-400">Username</label>
+                            <input type="text" id="opt2User" value="57grnrd4s" class="w-full bg-slate-900 border border-slate-800 rounded p-1 text-xs text-slate-200">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-400">Password</label>
+                            <input type="password" id="opt2Pass" placeholder="Enter password" class="w-full bg-slate-900 border border-slate-800 rounded p-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <button onclick="loadOption2()" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-semibold transition mt-1">
+                        Connect Xtream Server
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Script Logic -->
+    <!-- Application Logic -->
     <script>
         let allChannels = [];
         let filteredChannels = [];
@@ -137,10 +172,24 @@
         let currentPage = 1;
         const itemsPerPage = 40;
         let hlsPlayer = null;
+        let useProxy = true; // Enabled by default for HTTP/CORS support
+        const PROXY_URL = 'https://corsproxy.io/?';
+        const SAFETY_CHANNEL_CAP = 2000;
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadChannels();
+            // Auto-fill saved password if previously stored
+            const savedPass = localStorage.getItem('sp_xt_pass');
+            if (savedPass) {
+                document.getElementById('opt2Pass').value = savedPass;
+            }
         });
+
+        function toggleProxy() {
+            useProxy = !useProxy;
+            document.getElementById('proxyStatus').innerText = useProxy ? 'Corsproxy.io' : 'Direct';
+            document.getElementById('proxyBtn').classList.toggle('bg-emerald-950', useProxy);
+            document.getElementById('proxyBtn').classList.toggle('border-emerald-700', useProxy);
+        }
 
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
@@ -150,70 +199,107 @@
             document.getElementById('errorMessage').innerText = msg;
         }
 
-        async function loadChannels() {
-            // Priority 1: Check browser LocalStorage for imported JSON file
-            const storedJSON = localStorage.getItem('sp_my_channels');
-            if (storedJSON) {
-                try {
-                    allChannels = JSON.parse(storedJSON);
-                    populateCategories();
-                    filterChannels();
-                    document.getElementById('playerStatus').innerText = `Loaded ${allChannels.length} channels from local memory.`;
-                    return;
-                } catch(e) {}
-            }
+        // Option 1 Handler
+        function loadOption1() {
+            fetchM3U('https://iptv-org.github.io/iptv/index.m3u');
+        }
 
-            // Priority 2: Fetch default repository my_channels.json file
+        async function fetchM3U(url) {
+            hideError();
+            document.getElementById('playerStatus').innerText = "Fetching Option 1 M3U list...";
+            closeModal('playlistModal');
+
             try {
-                const res = await fetch('my_channels.json');
-                if (res.ok) {
-                    allChannels = await res.json();
-                    populateCategories();
-                    filterChannels();
-                    document.getElementById('playerStatus').innerText = `Loaded ${allChannels.length} channels from repository.`;
-                } else {
-                    showError("No channel data found. Click 'Update Channels' to upload your my_channels.json file.");
-                }
+                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(url) : url;
+                const response = await fetch(targetUrl);
+                if (!response.ok) throw new Error(`HTTP Error ${response.status}`);
+                const text = await response.text();
+                parseM3UText(text);
             } catch (err) {
-                showError("Upload your extracted my_channels.json file to begin viewing channels.");
+                showError(`Option 1 Error: ${err.message}. Try toggling proxy.`);
+                document.getElementById('playerStatus').innerText = "Failed to load M3U playlist.";
             }
         }
 
-        function loadUploadedFile() {
-            const input = document.getElementById('jsonFileInput');
-            if (!input.files || input.files.length === 0) {
-                alert("Please select a valid my_channels.json file.");
+        function parseM3UText(text) {
+            const lines = text.split('\n');
+            let channels = [];
+            let currentItem = {};
+
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (line.startsWith('#EXTINF:')) {
+                    const nameMatch = line.match(/,(.+)$/);
+                    const name = nameMatch ? nameMatch[1].trim() : 'Unnamed Channel';
+                    const groupMatch = line.match(/group-title="([^"]+)"/i);
+                    const group = groupMatch ? groupMatch[1] : 'General';
+                    const logoMatch = line.match(/tvg-logo="([^"]+)"/i);
+                    const logo = logoMatch ? logoMatch[1] : '';
+                    currentItem = { name, group, logo };
+                } else if (line.length > 0 && !line.startsWith('#')) {
+                    currentItem.url = line;
+                    channels.push(currentItem);
+                    currentItem = {};
+                    if (channels.length >= SAFETY_CHANNEL_CAP) break;
+                }
+            }
+
+            allChannels = channels;
+            populateCategories();
+            filterChannels();
+            document.getElementById('playerStatus').innerText = `Loaded ${channels.length} channels. Tap a channel to play.`;
+        }
+
+        // Option 2 Handler
+        async function loadOption2() {
+            let server = document.getElementById('opt2Server').value.trim();
+            const user = document.getElementById('opt2User').value.trim();
+            const pass = document.getElementById('opt2Pass').value.trim();
+
+            if (!server || !user || !pass) {
+                alert("Please enter password for Option 2.");
                 return;
             }
 
-            const file = input.files[0];
-            const reader = new FileReader();
+            // Save password locally for convenient re-use
+            localStorage.setItem('sp_xt_pass', pass);
 
-            reader.onload = function(e) {
+            hideError();
+            closeModal('playlistModal');
+            document.getElementById('playerStatus').innerText = "Connecting to Option 2 Xtream Server...";
+
+            server = server.endsWith('/') ? server.slice(0, -1) : server;
+            const apiUrl = `${server}/player_api.php?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&action=get_live_streams`;
+
+            try {
+                const targetUrl = useProxy ? PROXY_URL + encodeURIComponent(apiUrl) : apiUrl;
+                const res = await fetch(targetUrl);
+                const rawText = await res.text();
+                
+                let data;
                 try {
-                    const parsed = JSON.parse(e.target.result);
-                    if (Array.isArray(parsed)) {
-                        allChannels = parsed;
-                        localStorage.setItem('sp_my_channels', JSON.stringify(parsed));
-                        populateCategories();
-                        filterChannels();
-                        closeModal('uploadModal');
-                        document.getElementById('playerStatus').innerText = `Successfully loaded and saved ${allChannels.length} channels.`;
-                    } else {
-                        alert("Invalid JSON format. Please use the file generated by extractor.html");
-                    }
-                } catch(err) {
-                    alert("Error reading JSON file.");
+                    data = JSON.parse(rawText);
+                } catch(e) {
+                    throw new Error("Invalid payload or authentication error.");
                 }
-            };
 
-            reader.readAsText(file);
-        }
-
-        function clearSavedData() {
-            localStorage.removeItem('sp_my_channels');
-            closeModal('uploadModal');
-            loadChannels();
+                if (Array.isArray(data)) {
+                    allChannels = data.slice(0, SAFETY_CHANNEL_CAP).map(item => ({
+                        name: item.name,
+                        group: item.category_name || 'Xtream Channel',
+                        logo: item.stream_icon || '',
+                        url: `${server}/live/${user}/${pass}/${item.stream_id}.m3u8`
+                    }));
+                    populateCategories();
+                    filterChannels();
+                    document.getElementById('playerStatus').innerText = `Loaded ${allChannels.length} Xtream channels.`;
+                } else {
+                    throw new Error("Authentication failed or channel list empty.");
+                }
+            } catch (err) {
+                showError(`Option 2 Error: ${err.message}. Ensure credentials are correct & Proxy is enabled.`);
+                document.getElementById('playerStatus').innerText = "Xtream connection failed.";
+            }
         }
 
         function populateCategories() {
@@ -326,6 +412,10 @@
             const video = document.getElementById('videoPlayer');
             let streamUrl = ch.url;
 
+            if (useProxy) {
+                streamUrl = PROXY_URL + encodeURIComponent(streamUrl);
+            }
+
             if (Hls.isSupported()) {
                 if (hlsPlayer) {
                     hlsPlayer.destroy();
@@ -348,7 +438,7 @@
 
                 hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
                     if (data.fatal) {
-                        showError("Unable to play stream. The stream link may be offline or restricted by CORS.");
+                        showError("Stream playback error. Toggle Proxy mode if CORS blocks video.");
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
